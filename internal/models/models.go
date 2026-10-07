@@ -346,6 +346,7 @@ type DistroProfile struct {
 	BootParamsWithSquashfs string      `json:"boot_params_with_squashfs,omitempty"`
 	AutoInstallType        string      `json:"auto_install_type,omitempty"`
 	BootMethod             string      `json:"boot_method,omitempty"`
+	IsoInitrdName          string      `json:"iso_initrd_name,omitempty"`
 	Custom                 bool        `gorm:"default:false" json:"custom"`
 	Version                string      `json:"version,omitempty"`
 }

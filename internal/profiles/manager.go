@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"bootimus/internal/models"
@@ -36,6 +37,7 @@ type ProfileData struct {
 	BootParamsWithSquashfs string       `json:"boot_params_with_squashfs,omitempty"`
 	AutoInstallType        string       `json:"auto_install_type,omitempty"`
 	BootMethod             string       `json:"boot_method,omitempty"`
+	IsoInitrdName          string       `json:"iso_initrd_name,omitempty"`
 	Mirrors                []ISOMirror  `json:"mirrors,omitempty"`
 	Releases               []ISORelease `json:"releases,omitempty"`
 }
@@ -43,6 +45,10 @@ type ProfileData struct {
 type Manager struct {
 	store              storage.Storage
 	DisableRemoteCheck bool
+	mu                 sync.RWMutex
+	loadMu             sync.Mutex
+	isoInitrdNames     map[string]string
+	isoInitrdLoaded    bool
 }
 
 func NewManager(store storage.Storage) *Manager {
@@ -50,6 +56,8 @@ func NewManager(store storage.Storage) *Manager {
 }
 
 func (m *Manager) SeedProfiles() error {
+	defer m.invalidateIsoInitrdNameCache()
+
 	data, err := embeddedProfiles.ReadFile("distro-profiles.json")
 	if err != nil {
 		return fmt.Errorf("failed to read embedded profiles: %w", err)
@@ -95,6 +103,8 @@ func (m *Manager) UpdateFromRemote() (added int, updated int, version string, er
 	if m.DisableRemoteCheck {
 		return 0, 0, "", fmt.Errorf("remote profile updates are disabled")
 	}
+	defer m.invalidateIsoInitrdNameCache()
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(RemoteProfilesURL)
 	if err != nil {
@@ -195,6 +205,148 @@ func (m *Manager) GetBootParams(distroID string, hasSquashfs bool) string {
 	return profile.DefaultBootParams
 }
 
+// IsoInitrdName returns the name under which the original uploaded ISO
+// should be chain-loaded as an additional initrd module for the given
+// distro profile (e.g. Proxmox VE, whose installer expects the source ISO
+// to be available alongside the kernel/initrd at boot time). An empty
+// string means no extra initrd module is required.
+func (m *Manager) IsoInitrdName(distroID string) string {
+	if m == nil {
+		return ""
+	}
+	m.ensureIsoInitrdNameCache()
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.isoInitrdNames[NormalizeProfileID(distroID)]
+}
+
+func (m *Manager) IsoInitrdNameMap() map[string]string {
+	if m == nil {
+		return nil
+	}
+	m.ensureIsoInitrdNameCache()
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	isoInitrdNames := make(map[string]string, len(m.isoInitrdNames))
+	for profileID, initrdName := range m.isoInitrdNames {
+		isoInitrdNames[profileID] = initrdName
+	}
+
+	return isoInitrdNames
+}
+
+func (m *Manager) ensureIsoInitrdNameCache() {
+	m.mu.RLock()
+	if m.isoInitrdLoaded {
+		m.mu.RUnlock()
+		return
+	}
+	m.mu.RUnlock()
+
+	m.loadMu.Lock()
+	defer m.loadMu.Unlock()
+
+	m.mu.RLock()
+	if m.isoInitrdLoaded {
+		m.mu.RUnlock()
+		return
+	}
+	m.mu.RUnlock()
+
+	allProfiles, err := m.store.ListDistroProfiles()
+	if err != nil {
+		log.Printf("Profiles: Failed to load iso initrd profile cache: %v", err)
+		m.mu.Lock()
+		m.isoInitrdNames = map[string]string{}
+		m.isoInitrdLoaded = true
+		m.mu.Unlock()
+		return
+	}
+	isoInitrdNames := buildIsoInitrdNameMap(allProfiles)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.isoInitrdLoaded {
+		m.isoInitrdNames = isoInitrdNames
+		m.isoInitrdLoaded = true
+	}
+}
+
+func buildIsoInitrdNameMap(allProfiles []*models.DistroProfile) map[string]string {
+	isoInitrdNames := make(map[string]string)
+	profileIDs := make(map[string]string)
+	for _, p := range allProfiles {
+		if p == nil || p.ProfileID == "" || p.IsoInitrdName == "" {
+			continue
+		}
+		normalizedProfileID := NormalizeProfileID(p.ProfileID)
+		if normalizedProfileID == "" || !IsSafeIsoInitrdName(p.IsoInitrdName) {
+			continue
+		}
+		currentProfileID, exists := profileIDs[normalizedProfileID]
+		if exists && !preferIsoInitrdProfile(p.ProfileID, p.IsoInitrdName, currentProfileID, isoInitrdNames[normalizedProfileID], normalizedProfileID) {
+			continue
+		}
+		isoInitrdNames[normalizedProfileID] = p.IsoInitrdName
+		profileIDs[normalizedProfileID] = p.ProfileID
+	}
+	return isoInitrdNames
+}
+
+func preferIsoInitrdProfile(candidateID, candidateName, currentID, currentName, normalizedID string) bool {
+	candidateIsCanonical := candidateID == normalizedID
+	currentIsCanonical := currentID == normalizedID
+	if candidateIsCanonical != currentIsCanonical {
+		return candidateIsCanonical
+	}
+	if candidateID != currentID {
+		return candidateID < currentID
+	}
+	return candidateName < currentName
+}
+
+const maxIsoInitrdNameLength = 128
+
+func IsSafeIsoInitrdName(name string) bool {
+	if name == "" || len(name) > maxIsoInitrdNameLength {
+		return false
+	}
+	hasAlphanumeric := false
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			hasAlphanumeric = true
+			continue
+		}
+		if c == '.' || c == '_' || c == '-' {
+			continue
+		}
+		return false
+	}
+	return hasAlphanumeric
+}
+
+func (m *Manager) invalidateIsoInitrdNameCache() {
+	m.loadMu.Lock()
+	defer m.loadMu.Unlock()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.isoInitrdNames = nil
+	m.isoInitrdLoaded = false
+}
+
+func (m *Manager) InvalidateIsoInitrdNameCache() {
+	m.invalidateIsoInitrdNameCache()
+}
+
+func NormalizeProfileID(profileID string) string {
+	return strings.ToLower(strings.TrimSpace(profileID))
+}
+
 func profileDataToModel(p ProfileData, version string) *models.DistroProfile {
 	return &models.DistroProfile{
 		ProfileID:              p.ID,
@@ -208,6 +360,7 @@ func profileDataToModel(p ProfileData, version string) *models.DistroProfile {
 		BootParamsWithSquashfs: p.BootParamsWithSquashfs,
 		AutoInstallType:        p.AutoInstallType,
 		BootMethod:             p.BootMethod,
+		IsoInitrdName:          p.IsoInitrdName,
 		Custom:                 false,
 		Version:                version,
 	}

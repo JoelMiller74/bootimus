@@ -24,6 +24,7 @@ type MenuBuilder struct {
 	enabledTools      []tools.EnabledTool
 	nextBootImageID   uint
 	profileManager    *profiles.Manager
+	isoInitrdNames    map[string]string
 	autoInstallTypes  map[uint]string
 	forceLocalDefault bool
 }
@@ -69,6 +70,11 @@ func (s *Server) generateIPXEMenuWithGroups(images []models.Image, macAddress st
 		}
 	}
 
+	var isoInitrdNames map[string]string
+	if s.config.ProfileManager != nil {
+		isoInitrdNames = s.config.ProfileManager.IsoInitrdNameMap()
+	}
+
 	mb := &MenuBuilder{
 		images:            images,
 		groups:            groups,
@@ -80,6 +86,7 @@ func (s *Server) generateIPXEMenuWithGroups(images []models.Image, macAddress st
 		enabledTools:      enabledTools,
 		nextBootImageID:   nbID,
 		profileManager:    s.config.ProfileManager,
+		isoInitrdNames:    isoInitrdNames,
 		autoInstallTypes:  autoInstallTypes,
 		forceLocalDefault: client != nil && client.EnrollmentState == models.EnrollmentStateInstalled,
 	}
@@ -391,6 +398,11 @@ func (mb *MenuBuilder) buildKernelBootSection(img *models.Image, encodedFilename
 		}
 		sb.WriteString(fmt.Sprintf("kernel %s/boot/%s/%s%s%s\n", baseURL, cacheDir, kernelPath, autoInstallParam, bootParams))
 		sb.WriteString(fmt.Sprintf("initrd %s/boot/%s/%s%s\n", baseURL, cacheDir, initrdPath, initrdName))
+		if img.Distro != "" {
+			if isoInitrdName := mb.isoInitrdNames[profiles.NormalizeProfileID(img.Distro)]; profiles.IsSafeIsoInitrdName(isoInitrdName) {
+				sb.WriteString(fmt.Sprintf("initrd %s/isos/%s %s\n", baseURL, encodedFilename, isoInitrdName))
+			}
+		}
 		sb.WriteString("boot || goto failed\n")
 	}
 

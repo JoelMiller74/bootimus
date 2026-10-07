@@ -38,8 +38,8 @@ I've used Claude CLI to help with some parts of this project - mostly making the
 
 ## Screenshots
 
-| Admin Dashboard | Upload ISOs | Download from URL |
-|----------------|-------------|-------------------|
+| Admin Dashboard                      | Upload ISOs                 | Download from URL             |
+| ------------------------------------ | --------------------------- | ----------------------------- |
 | ![Admin Interface](docs/admin_1.png) | ![Upload](docs/admin_2.png) | ![Download](docs/admin_3.png) |
 
 ## Quick Start
@@ -70,7 +70,7 @@ open http://localhost:8081
 A docker logo is available, see Bootimus `bootimus_logo.png`.
 Ex.: it can be used with unraid with: https://raw.githubusercontent.com/garybowers/bootimus/logos/bootimus_logo_square_ulow.png
 
-On Unraid you can find an App/Template called "bootimus" for easy installation. Consider using a "custom network" with an dedicated ip address for bootimus docker.
+On Unraid you can find an App/Template called "bootimus" for easy installation. Consider using a "custom network" with a dedicated ip address for bootimus docker.
 
 ### Standalone Binary
 
@@ -130,14 +130,14 @@ $ systemctl start bootimus
 
 Bootimus includes a built-in tools system for diagnostic and utility software. Tools can be downloaded and enabled from the admin UI under the **Tools** section. When enabled, they appear in a **Tools** submenu in the PXE boot menu.
 
-| Tool | Description |
-|------|-------------|
-| **GParted Live** | Partition editor for managing disk partitions |
-| **Clonezilla Live** | Disk cloning and imaging |
-| **Memtest86+** | Memory testing and diagnostics |
-| **SystemRescue** | Full rescue toolkit (file recovery, disk repair, network tools) |
-| **ShredOS** | Secure disk wiping based on nwipe |
-| **Netboot.xyz** | Chainloads into hundreds of OS installers and tools |
+| Tool                | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| **GParted Live**    | Partition editor for managing disk partitions                   |
+| **Clonezilla Live** | Disk cloning and imaging                                        |
+| **Memtest86+**      | Memory testing and diagnostics                                  |
+| **SystemRescue**    | Full rescue toolkit (file recovery, disk repair, network tools) |
+| **ShredOS**         | Secure disk wiping based on nwipe                               |
+| **Netboot.xyz**     | Chainloads into hundreds of OS installers and tools             |
 
 Download URLs are shown in the UI and can be overridden to point at local mirrors or newer versions.
 
@@ -166,7 +166,10 @@ The built-in set is always available as a fallback. Files not present in the act
 - Arch Linux, CachyOS, EndeavourOS, Manjaro, Garuda, Artix, BlackArch, Parabola, SteamOS
 
 ### Debian/Ubuntu-based
-- Ubuntu (all flavours), Debian, Linux Mint, Pop!_OS, Kali, Parrot, Zorin, elementary OS, MX Linux, antiX, Devuan, PureOS, Deepin, LMDE, TrueNAS SCALE, Proxmox
+- Ubuntu (all flavours), Debian, Linux Mint, Pop!_OS, Kali, Parrot, Zorin, elementary OS, MX Linux, antiX, Devuan, PureOS, Deepin, LMDE, TrueNAS SCALE
+
+### Debian-family (dedicated profiles)
+- **Proxmox VE/Backup Server/Mail Gateway** — recognised via a dedicated profile (not just the generic Debian pattern) so the automated-install kernel parameters (`proxmox-start-auto-installer`) and the required ISO chain-load are applied automatically. See [Proxmox's prepare-iso/answer.toml docs](https://pve.proxmox.com/pve-docs/chapter-pve-installation.html) to bake an answer file into the ISO before uploading it to Bootimus.
 
 ### Red Hat-based
 - Fedora, CentOS, Rocky Linux, AlmaLinux, Oracle Linux, Nobara, Mageia
@@ -268,23 +271,23 @@ services:
 
 ## Why Bootimus Over iVentoy?
 
-| Feature | Bootimus | iVentoy |
-|---------|----------|---------|
-| **Language** | Go | C |
-| **Single Binary** | Yes | No |
-| **Embedded Bootloaders** | Yes | No |
-| **Standalone PXE** | Built-in proxyDHCP — no DHCP reconfig needed | Requires external DHCP changes |
-| **Database** | SQLite / PostgreSQL | File-based |
-| **Web UI** | Modern sidebar UI with REST API | Basic HTML |
-| **Authentication** | JWT + LDAP/AD | None |
-| **Boot Logging** | Full tracking with live streaming | Limited |
-| **MAC-based ACL** | Granular per-client | No |
-| **ISO Upload** | Web upload + URL download | Manual copy |
-| **Boot Tools** | GParted, Clonezilla, Memtest86+, etc. | No |
-| **Bootloader Management** | Swappable sets via UI | No |
-| **Docker Support** | Multi-arch | Limited |
-| **API-First** | RESTful API | No |
-| **Licence** | Apache 2.0 | GPL |
+| Feature                   | Bootimus                                     | iVentoy                        |
+| ------------------------- | -------------------------------------------- | ------------------------------ |
+| **Language**              | Go                                           | C                              |
+| **Single Binary**         | Yes                                          | No                             |
+| **Embedded Bootloaders**  | Yes                                          | No                             |
+| **Standalone PXE**        | Built-in proxyDHCP — no DHCP reconfig needed | Requires external DHCP changes |
+| **Database**              | SQLite / PostgreSQL                          | File-based                     |
+| **Web UI**                | Modern sidebar UI with REST API              | Basic HTML                     |
+| **Authentication**        | JWT + LDAP/AD                                | None                           |
+| **Boot Logging**          | Full tracking with live streaming            | Limited                        |
+| **MAC-based ACL**         | Granular per-client                          | No                             |
+| **ISO Upload**            | Web upload + URL download                    | Manual copy                    |
+| **Boot Tools**            | GParted, Clonezilla, Memtest86+, etc.        | No                             |
+| **Bootloader Management** | Swappable sets via UI                        | No                             |
+| **Docker Support**        | Multi-arch                                   | Limited                        |
+| **API-First**             | RESTful API                                  | No                             |
+| **Licence**               | Apache 2.0                                   | GPL                            |
 
 ## DHCP Configuration
 

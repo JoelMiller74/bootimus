@@ -805,7 +805,7 @@ func (e *Extractor) detectWindows(img *iso9660.Image) (*BootFiles, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("not Windows ISO (found: BCD=%v, boot.sdi=%v, boot.wim=%v)", bcdPath != "", bootSdiPath != "", bootWimPath != "")
+	return nil, fmt.Errorf("%w: found BCD=%v, boot.sdi=%v, boot.wim=%v", ErrNotWindowsISO, bcdPath != "", bootSdiPath != "", bootWimPath != "")
 }
 
 func (e *Extractor) cacheBootFiles(files *BootFiles, img *iso9660.Image, isoPath string) error {

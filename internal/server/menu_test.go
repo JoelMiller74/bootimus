@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +15,10 @@ func testMenuBuilder(types map[uint]string) *MenuBuilder {
 		httpPort:         8080,
 		autoInstallTypes: types,
 	}
+}
+
+func testBaseURL(mb *MenuBuilder) string {
+	return fmt.Sprintf("http://%s:%d", mb.serverAddr, mb.httpPort)
 }
 
 func TestBuildNextBootBypassesMenuForGroupedImage(t *testing.T) {
@@ -67,19 +72,30 @@ func TestBuildKernelBootSectionAutoInstallParams(t *testing.T) {
 
 	cases := []struct {
 		scriptType string
-		want       string
 	}{
-		{"kickstart", "inst.ks=http://10.0.0.1:8080/autoinstall/test.iso?mac=aa:bb:cc:dd:ee:ff"},
-		{"preseed", "auto=true priority=critical url=http://10.0.0.1:8080/autoinstall/test.iso?mac=aa:bb:cc:dd:ee:ff"},
-		{"autoinstall", "autoinstall ds=nocloud-net;s=http://10.0.0.1:8080/autoinstall/test.iso/mac/aa:bb:cc:dd:ee:ff/"},
-		{"generic", "autoinstall=http://10.0.0.1:8080/autoinstall/test.iso?mac=aa:bb:cc:dd:ee:ff"},
+		{"kickstart"},
+		{"preseed"},
+		{"autoinstall"},
+		{"generic"},
 	}
 
 	for _, c := range cases {
 		mb := testMenuBuilder(map[uint]string{7: c.scriptType})
+		baseURL := testBaseURL(mb)
+		var want string
+		switch c.scriptType {
+		case "kickstart":
+			want = fmt.Sprintf("inst.ks=%s/autoinstall/test.iso?mac=%s", baseURL, mb.macAddress)
+		case "preseed":
+			want = fmt.Sprintf("auto=true priority=critical url=%s/autoinstall/test.iso?mac=%s", baseURL, mb.macAddress)
+		case "autoinstall":
+			want = fmt.Sprintf("autoinstall ds=nocloud-net;s=%s/autoinstall/test.iso/mac/%s/", baseURL, mb.macAddress)
+		default:
+			want = fmt.Sprintf("autoinstall=%s/autoinstall/test.iso?mac=%s", baseURL, mb.macAddress)
+		}
 		out := mb.buildKernelBootSection(img, "test.iso", "test")
-		if !strings.Contains(out, c.want) {
-			t.Errorf("type %s: expected kernel line to contain %q, got:\n%s", c.scriptType, c.want, out)
+		if !strings.Contains(out, want) {
+			t.Errorf("type %s: expected kernel line to contain %q, got:\n%s", c.scriptType, want, out)
 		}
 	}
 }
@@ -124,9 +140,10 @@ func TestResolveBootParamsPlaceholders(t *testing.T) {
 		BootParams: "url={{BASE_URL}} host={{SERVER_ADDR}} file={{IMAGE_FILENAME}} legacy={{FILENAME}} cache={{CACHE_DIR}} mac={{MAC}}",
 	}
 	mb := testMenuBuilder(nil)
+	baseURL := testBaseURL(mb)
 
-	got := mb.resolveBootParams(img, "http://10.0.0.1:8080", "test.iso", "test")
-	want := "url=http://10.0.0.1:8080 host=10.0.0.1 file=test.iso legacy=test.iso cache=test mac=aa:bb:cc:dd:ee:ff"
+	got := mb.resolveBootParams(img, baseURL, "test.iso", "test")
+	want := fmt.Sprintf("url=%s host=%s file=test.iso legacy=test.iso cache=test mac=%s", baseURL, mb.serverAddr, mb.macAddress)
 	if got != want {
 		t.Errorf("expected %q, got %q", want, got)
 	}
@@ -142,15 +159,16 @@ func TestBuildWindowsBootSectionDropsPathTokens(t *testing.T) {
 		Distro:     "windows",
 		BootParams: "rawbcd /opt/bootimus/data/isos/Win11_25H2/iso/sources/boot.wim quiet",
 	}
+	baseURL := testBaseURL(mb)
 
 	out := mb.buildKernelBootSection(img, "Win11_25H2.iso", "Win11_25H2")
-	if !strings.Contains(out, "kernel http://10.0.0.1:8080/wimboot rawbcd quiet\n") {
+	if !strings.Contains(out, fmt.Sprintf("kernel %s/wimboot rawbcd quiet\n", baseURL)) {
 		t.Errorf("expected path tokens stripped from the wimboot line, got:\n%s", out)
 	}
 	if strings.Contains(out, "/opt/bootimus") {
 		t.Errorf("server filesystem path leaked into the menu:\n%s", out)
 	}
-	if !strings.Contains(out, "initrd http://10.0.0.1:8080/boot/Win11_25H2/iso/sources/boot.wim boot.wim") {
+	if !strings.Contains(out, fmt.Sprintf("initrd %s/boot/Win11_25H2/iso/sources/boot.wim boot.wim", baseURL)) {
 		t.Errorf("expected boot.wim initrd line, got:\n%s", out)
 	}
 }
@@ -164,9 +182,57 @@ func TestBuildWindowsBootSectionBareWimboot(t *testing.T) {
 		BootMethod: "kernel",
 		Distro:     "windows",
 	}
+	baseURL := testBaseURL(mb)
 
 	out := mb.buildKernelBootSection(img, "Win11_25H2.iso", "Win11_25H2")
-	if !strings.Contains(out, "kernel http://10.0.0.1:8080/wimboot\n") {
+	if !strings.Contains(out, fmt.Sprintf("kernel %s/wimboot\n", baseURL)) {
 		t.Errorf("expected a bare wimboot kernel line, got:\n%s", out)
+	}
+}
+
+func TestBuildKernelBootSectionChainsIsoInitrdForProxmox(t *testing.T) {
+	mb := testMenuBuilder(nil)
+	mb.isoInitrdNames = map[string]string{"proxmox": "proxmox.iso"}
+	baseURL := testBaseURL(mb)
+
+	img := &models.Image{ID: 7, Filename: "proxmox-ve_9.2-1.iso", Enabled: true, BootMethod: "kernel", Distro: "proxmox"}
+	out := mb.buildKernelBootSection(img, "proxmox-ve_9.2-1.iso", "proxmox-ve_9.2-1")
+
+	if !strings.Contains(out, fmt.Sprintf("initrd %s/isos/proxmox-ve_9.2-1.iso proxmox.iso\n", baseURL)) {
+		t.Errorf("expected the source ISO to be chain-loaded as an extra initrd module, got:\n%s", out)
+	}
+}
+
+func TestBuildKernelBootSectionChainsIsoInitrdForNormalizedDistro(t *testing.T) {
+	mb := testMenuBuilder(nil)
+	mb.isoInitrdNames = map[string]string{"proxmox": "proxmox.iso"}
+	baseURL := testBaseURL(mb)
+
+	img := &models.Image{ID: 7, Filename: "proxmox-ve_9.2-1.iso", Enabled: true, BootMethod: "kernel", Distro: "  ProxMox  "}
+	out := mb.buildKernelBootSection(img, "proxmox-ve_9.2-1.iso", "proxmox-ve_9.2-1")
+
+	if !strings.Contains(out, fmt.Sprintf("initrd %s/isos/proxmox-ve_9.2-1.iso proxmox.iso\n", baseURL)) {
+		t.Errorf("expected the source ISO to be chain-loaded as an extra initrd module for normalized distro, got:\n%s", out)
+	}
+}
+
+func TestBuildKernelBootSectionRejectsUnsafeDirectIsoInitrdName(t *testing.T) {
+	mb := testMenuBuilder(nil)
+	mb.isoInitrdNames = map[string]string{"proxmox": "proxmox.iso\nreboot"}
+	img := &models.Image{ID: 7, Filename: "proxmox.iso", Enabled: true, BootMethod: "kernel", Distro: "proxmox"}
+
+	out := mb.buildKernelBootSection(img, "proxmox.iso", "proxmox")
+	if strings.Contains(out, fmt.Sprintf("initrd %s/isos/proxmox.iso ", testBaseURL(mb))) {
+		t.Fatalf("unsafe direct iso-initrd value was emitted in menu:\n%s", out)
+	}
+}
+
+func TestBuildKernelBootSectionNoExtraInitrdWithoutProfile(t *testing.T) {
+	mb := testMenuBuilder(nil)
+	img := &models.Image{ID: 7, Filename: "ubuntu.iso", Enabled: true, BootMethod: "kernel", Distro: "ubuntu"}
+
+	out := mb.buildKernelBootSection(img, "ubuntu.iso", "ubuntu")
+	if strings.Count(out, "initrd ") != 1 {
+		t.Errorf("expected no extra initrd module when no profile is configured, got:\n%s", out)
 	}
 }

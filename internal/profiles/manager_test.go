@@ -2,6 +2,8 @@ package profiles
 
 import (
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"bootimus/internal/models"
@@ -19,7 +21,7 @@ func TestMatchProfile_RealISOFilenames(t *testing.T) {
 		{"linuxmint-22-cinnamon-64bit.iso", "mint"},
 		{"pop-os_22.04_amd64_intel_54.iso", "popos"},
 		{"debian-12.7.0-amd64-netinst.iso", "debian"},
-		{"proxmox-ve_8.2-1.iso", "debian"},
+		{"proxmox-ve_8.2-1.iso", "proxmox"},
 		{"archlinux-2025.04.01-x86_64.iso", "arch"},
 		{"cachyos-desktop-linux-250101.iso", "arch"},
 		{"manjaro-kde-24.0.0-240416-linux69.iso", "manjaro"},
@@ -104,6 +106,130 @@ func TestMatchProfile_FallsBackToFamily(t *testing.T) {
 	if got.ProfileID != "obscure" {
 		t.Errorf("got %s, want obscure via family match", got.ProfileID)
 	}
+}
+
+func TestProxmoxProfile_AutomatedInstallBootParams(t *testing.T) {
+	profiles := loadEmbeddedForTest(t)
+
+	var proxmox *models.DistroProfile
+	for _, p := range profiles {
+		if p.ProfileID == "proxmox" {
+			proxmox = p
+			break
+		}
+	}
+	if proxmox == nil {
+		t.Fatal("expected an embedded 'proxmox' distro profile")
+	}
+
+	if !strings.Contains(proxmox.DefaultBootParams, "proxmox-start-auto-installer") {
+		t.Errorf("expected default boot params to trigger the automated installer, got %q", proxmox.DefaultBootParams)
+	}
+	if proxmox.IsoInitrdName == "" {
+		t.Error("expected the proxmox profile to chain-load the source ISO as an extra initrd module")
+	}
+	for _, path := range []string{"/boot/linux26"} {
+		if !containsString(proxmox.KernelPaths, path) {
+			t.Errorf("expected kernel_paths to contain %q, got %v", path, proxmox.KernelPaths)
+		}
+	}
+	for _, path := range []string{"/boot/initrd.img"} {
+		if !containsString(proxmox.InitrdPaths, path) {
+			t.Errorf("expected initrd_paths to contain %q, got %v", path, proxmox.InitrdPaths)
+		}
+	}
+}
+
+func TestBuildIsoInitrdNameMapNormalizesIDsAndRejectsUnsafeNames(t *testing.T) {
+	got := buildIsoInitrdNameMap([]*models.DistroProfile{
+		{ProfileID: "  ProxMoX  ", IsoInitrdName: "proxmox.iso"},
+		{ProfileID: "debian", IsoInitrdName: "debian-initrd.img"},
+		{ProfileID: "unsafe-space", IsoInitrdName: "proxmox iso"},
+		{ProfileID: "unsafe-newline", IsoInitrdName: "proxmox\niso"},
+		{ProfileID: "unsafe-punctuation", IsoInitrdName: "proxmox;reboot"},
+		{ProfileID: "unsafe-path", IsoInitrdName: "proxmox/iso"},
+		{ProfileID: "dot", IsoInitrdName: "."},
+		{ProfileID: "dot-dot", IsoInitrdName: ".."},
+		{ProfileID: "punctuation-only", IsoInitrdName: "._-"},
+		{ProfileID: "hyphen-underscore", IsoInitrdName: "-_"},
+		{ProfileID: "max-length", IsoInitrdName: strings.Repeat("a", maxIsoInitrdNameLength)},
+		{ProfileID: "over-max-length", IsoInitrdName: strings.Repeat("a", maxIsoInitrdNameLength+1)},
+		nil,
+	})
+
+	if len(got) != 3 {
+		t.Fatalf("expected only safe initrd module names to be cached, got %#v", got)
+	}
+	if got["proxmox"] != "proxmox.iso" {
+		t.Errorf("expected normalized proxmox key with safe name, got %#v", got)
+	}
+	if got["debian"] != "debian-initrd.img" {
+		t.Errorf("expected safe Debian module name, got %#v", got)
+	}
+	if got["max-length"] != strings.Repeat("a", maxIsoInitrdNameLength) {
+		t.Errorf("expected name at maximum length to be accepted, got %#v", got)
+	}
+}
+
+func TestBuildIsoInitrdNameMapCollisionIsDeterministic(t *testing.T) {
+	profiles := []*models.DistroProfile{
+		{ProfileID: " Proxmox ", IsoInitrdName: "spaced.iso"},
+		{ProfileID: "Proxmox", IsoInitrdName: "mixed.iso"},
+		{ProfileID: "proxmox", IsoInitrdName: "canonical.iso"},
+		{ProfileID: " Debian ", IsoInitrdName: "debian-spaced.iso"},
+		{ProfileID: "DEBIAN", IsoInitrdName: "debian-upper.iso"},
+	}
+
+	forward := buildIsoInitrdNameMap(profiles)
+	reversed := make([]*models.DistroProfile, len(profiles))
+	for i := range profiles {
+		reversed[len(profiles)-1-i] = profiles[i]
+	}
+	backward := buildIsoInitrdNameMap(reversed)
+
+	if !reflect.DeepEqual(forward, backward) {
+		t.Fatalf("expected collision handling to be independent of profile order: forward=%v backward=%v", forward, backward)
+	}
+	if forward["proxmox"] != "canonical.iso" {
+		t.Errorf("expected exact normalized profile ID to win collision, got %q", forward["proxmox"])
+	}
+	if forward["debian"] != "debian-spaced.iso" {
+		t.Errorf("expected lexicographically smallest noncanonical ID to win collision, got %q", forward["debian"])
+	}
+}
+
+func TestNilManagerIsoInitrdAccessors(t *testing.T) {
+	var manager *Manager
+
+	if got := manager.IsoInitrdName("proxmox"); got != "" {
+		t.Errorf("IsoInitrdName on nil manager = %q, want empty string", got)
+	}
+	if got := manager.IsoInitrdNameMap(); got != nil {
+		t.Errorf("IsoInitrdNameMap on nil manager = %#v, want nil", got)
+	}
+}
+
+func TestIsoInitrdNameMapReturnsDefensiveCopy(t *testing.T) {
+	manager := &Manager{
+		isoInitrdNames:  map[string]string{"proxmox": "proxmox.iso"},
+		isoInitrdLoaded: true,
+	}
+
+	got := manager.IsoInitrdNameMap()
+	got["proxmox"] = "unsafe-change.iso"
+
+	if name := manager.IsoInitrdName("proxmox"); name != "proxmox.iso" {
+		t.Fatalf("mutating returned map changed cached module name to %q", name)
+	}
+}
+
+func containsString(haystack models.StringSlice, needle string) bool {
+	for _, v := range haystack {
+		if v == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func loadEmbeddedForTest(t *testing.T) []*models.DistroProfile {

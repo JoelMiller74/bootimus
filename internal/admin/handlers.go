@@ -1606,6 +1606,9 @@ func (h *Handler) SaveDistroProfile(w http.ResponseWriter, r *http.Request) {
 		h.sendJSON(w, http.StatusInternalServerError, Response{Success: false, Error: err.Error()})
 		return
 	}
+	if h.profileManager != nil {
+		h.profileManager.InvalidateIsoInitrdNameCache()
+	}
 
 	log.Printf("Admin: Distro profile saved - %s (%s)", profile.DisplayName, profile.ProfileID)
 	h.sendJSON(w, http.StatusOK, Response{Success: true, Message: "Profile saved", Data: profile})
@@ -1637,6 +1640,9 @@ func (h *Handler) DeleteDistroProfile(w http.ResponseWriter, r *http.Request) {
 	if err := h.storage.DeleteDistroProfile(profileID); err != nil {
 		h.sendJSON(w, http.StatusInternalServerError, Response{Success: false, Error: err.Error()})
 		return
+	}
+	if h.profileManager != nil {
+		h.profileManager.InvalidateIsoInitrdNameCache()
 	}
 
 	log.Printf("Admin: Distro profile deleted - %s", profileID)

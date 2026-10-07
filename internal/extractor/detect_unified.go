@@ -514,7 +514,17 @@ func (e *Extractor) detectWindowsUnified(reader FileSystemReader) (*BootFiles, e
 		}, nil
 	}
 
-	return nil, fmt.Errorf("not Windows ISO")
+	var missing []string
+	if bcdPath == "" {
+		missing = append(missing, "BCD")
+	}
+	if bootSdiPath == "" {
+		missing = append(missing, "boot.sdi")
+	}
+	if bootWimPath == "" {
+		missing = append(missing, "boot.wim")
+	}
+	return nil, fmt.Errorf("%w: missing required files: %s", ErrNotWindowsISO, strings.Join(missing, ", "))
 }
 
 func (e *Extractor) cacheBootFilesUnified(files *BootFiles, reader FileSystemReader, isoPath string) error {

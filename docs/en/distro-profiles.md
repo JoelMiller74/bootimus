@@ -25,10 +25,10 @@ Distro profiles define:
 
 ### Profile Types
 
-| Type | Description |
-|------|-------------|
+| Type         | Description                                                |
+| ------------ | ---------------------------------------------------------- |
 | **Built-in** | Shipped with Bootimus, updated from the central repository |
-| **Custom** | Created by the user, never overwritten by updates |
+| **Custom**   | Created by the user, never overwritten by updates          |
 
 Custom profiles always take priority over built-in profiles when matching ISO filenames.
 
@@ -188,30 +188,46 @@ curl -H "Authorization: Bearer $TOKEN" -X DELETE "http://localhost:8081/api/prof
 
 ## Profile Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `profile_id` | Yes | Unique identifier (e.g., `ubuntu`, `my-distro`) |
-| `display_name` | Yes | Human-readable name shown in the UI |
-| `family` | No | Distro family (e.g., `debian`, `arch`, `redhat`) — for grouping |
-| `filename_patterns` | Yes | Substrings to match in ISO filenames (case-insensitive) |
-| `kernel_paths` | No | Paths to try for the kernel inside the ISO (e.g., `/casper/vmlinuz`) |
-| `initrd_paths` | No | Paths to try for the initrd inside the ISO |
-| `squashfs_paths` | No | Paths to try for the squashfs root filesystem |
-| `default_boot_params` | No | Default kernel boot parameters (with placeholder support) |
-| `boot_params_with_squashfs` | No | Alternative boot params used when squashfs is detected |
-| `auto_install_type` | No | Auto-install format: `preseed`, `kickstart`, `autoinstall`, `autounattend` |
-| `boot_method` | No | Override boot method (e.g., `wimboot` for Windows) |
+| Field                       | Required | Description                                                                                                                                                                      |
+| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile_id`                | Yes      | Unique identifier (e.g., `ubuntu`, `my-distro`)                                                                                                                                  |
+| `display_name`              | Yes      | Human-readable name shown in the UI                                                                                                                                              |
+| `family`                    | No       | Distro family (e.g., `debian`, `arch`, `redhat`) — for grouping                                                                                                                  |
+| `filename_patterns`         | Yes      | Substrings to match in ISO filenames (case-insensitive)                                                                                                                          |
+| `kernel_paths`              | No       | Paths to try for the kernel inside the ISO (e.g., `/casper/vmlinuz`)                                                                                                             |
+| `initrd_paths`              | No       | Paths to try for the initrd inside the ISO                                                                                                                                       |
+| `squashfs_paths`            | No       | Paths to try for the squashfs root filesystem                                                                                                                                    |
+| `default_boot_params`       | No       | Default kernel boot parameters (with placeholder support)                                                                                                                        |
+| `boot_params_with_squashfs` | No       | Alternative boot params used when squashfs is detected                                                                                                                           |
+| `auto_install_type`         | No       | Auto-install format: `preseed`, `kickstart`, `autounattend`, or `autoinstall`                                                                                                    |
+| `boot_method`               | No       | Override boot method (e.g., `wimboot` for Windows)                                                                                                                               |
+| `iso_initrd_name`           | No       | If set, chain-load the original uploaded ISO as an extra initrd module with this module name (for distros whose installer expects source media present at boot, e.g. Proxmox VE) |
+
+### `iso_initrd_name` Notes
+
+- Use this only for installer workflows that require the source ISO to be present as a boot-time module.
+- **Name format**: Use ASCII letters and digits, optionally with `.`, `_`, or `-`. The name must contain at least one letter or digit. Spaces, control characters, path separators, and other characters are rejected, so the extra initrd line is omitted.
+- **Typical use**: Proxmox VE (`"iso_initrd_name": "proxmox.iso"`).
+- **Effect**: Bootimus adds an extra `initrd` line for the original ISO in the generated iPXE stanza.
+- **Caveat**: This increases boot-time memory pressure because the ISO is loaded into RAM during boot.
+
+Leave this field empty for distros that do not require source-media chaining.
+
+### Windows Profiles
+
+Windows extraction and boot detection are handled by dedicated Windows scanner logic (`BCD` + `boot.sdi` + `boot.wim`).
+Windows profiles can therefore keep `kernel_paths`/`initrd_paths` empty without breaking Windows extraction or wimboot flows.
 
 ## Placeholders
 
 Boot parameters support these placeholders, resolved at boot time:
 
-| Placeholder | Resolves to | Example |
-|-------------|-------------|---------|
-| `{{BASE_URL}}` | Server HTTP URL | `http://192.168.1.10:8080` |
-| `{{CACHE_DIR}}` | Extracted files directory | `ubuntu-24.04-server-amd64` |
-| `{{FILENAME}}` | ISO filename (URL-encoded) | `ubuntu-24.04-server-amd64.iso` |
-| `{{SQUASHFS}}` | Full URL to squashfs file | `http://192.168.1.10:8080/boot/ubuntu.../casper/filesystem.squashfs` |
+| Placeholder     | Resolves to                | Example                                                              |
+| --------------- | -------------------------- | -------------------------------------------------------------------- |
+| `{{BASE_URL}}`  | Server HTTP URL            | `http://192.168.1.10:8080`                                           |
+| `{{CACHE_DIR}}` | Extracted files directory  | `ubuntu-24.04-server-amd64`                                          |
+| `{{FILENAME}}`  | ISO filename (URL-encoded) | `ubuntu-24.04-server-amd64.iso`                                      |
+| `{{SQUASHFS}}`  | Full URL to squashfs file  | `http://192.168.1.10:8080/boot/ubuntu.../casper/filesystem.squashfs` |
 
 ### Example with Placeholders
 

@@ -1,15 +1,16 @@
 package server
 
 import (
-	"bootimus/internal/models"
-	"bootimus/internal/profiles"
-	"bootimus/internal/tools"
 	"fmt"
 	"log"
 	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"bootimus/internal/models"
+	"bootimus/internal/profiles"
+	"bootimus/internal/tools"
 )
 
 type MenuBuilder struct {
@@ -346,6 +347,12 @@ func (mb *MenuBuilder) buildKernelBootSection(img *models.Image, encodedFilename
 	var sb strings.Builder
 
 	baseURL := fmt.Sprintf("http://%s:%d", mb.serverAddr, mb.httpPort)
+	if profiles.NormalizeProfileID(img.Distro) == "proxmox" {
+		pxeScriptURL := fmt.Sprintf("%s/boot/%s/proxmox-pxe/boot.ipxe", baseURL, cacheDir)
+		sb.WriteString("echo Starting Proxmox PXE installer...\n")
+		sb.WriteString(fmt.Sprintf("chain %s || goto failed\n", pxeScriptURL))
+		return sb.String()
+	}
 
 	autoInstallParam := mb.buildAutoInstallParam(img, baseURL, encodedFilename)
 

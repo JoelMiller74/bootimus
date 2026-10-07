@@ -44,7 +44,18 @@ RUN bash scripts/build-secureboot-official-set.sh
 FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wimtools samba ca-certificates libarchive-tools \
+    wimtools samba ca-certificates libarchive-tools wget xorriso \
+    && wget -q https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+    -O /usr/share/keyrings/proxmox-archive-keyring.gpg \
+    && printf '%s\n' \
+    'Types: deb' \
+    'URIs: http://download.proxmox.com/debian/pve' \
+    'Suites: trixie' \
+    'Components: pve-no-subscription' \
+    'Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg' \
+    > /etc/apt/sources.list.d/proxmox.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends proxmox-auto-install-assistant \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out/bootimus /bootimus

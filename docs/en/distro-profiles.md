@@ -188,30 +188,36 @@ curl -H "Authorization: Bearer $TOKEN" -X DELETE "http://localhost:8081/api/prof
 
 ## Profile Fields
 
-| Field                       | Required | Description                                                                                                                                                                      |
-| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profile_id`                | Yes      | Unique identifier (e.g., `ubuntu`, `my-distro`)                                                                                                                                  |
-| `display_name`              | Yes      | Human-readable name shown in the UI                                                                                                                                              |
-| `family`                    | No       | Distro family (e.g., `debian`, `arch`, `redhat`) — for grouping                                                                                                                  |
-| `filename_patterns`         | Yes      | Substrings to match in ISO filenames (case-insensitive)                                                                                                                          |
-| `kernel_paths`              | No       | Paths to try for the kernel inside the ISO (e.g., `/casper/vmlinuz`)                                                                                                             |
-| `initrd_paths`              | No       | Paths to try for the initrd inside the ISO                                                                                                                                       |
-| `squashfs_paths`            | No       | Paths to try for the squashfs root filesystem                                                                                                                                    |
-| `default_boot_params`       | No       | Default kernel boot parameters (with placeholder support)                                                                                                                        |
-| `boot_params_with_squashfs` | No       | Alternative boot params used when squashfs is detected                                                                                                                           |
-| `auto_install_type`         | No       | Auto-install format: `preseed`, `kickstart`, `autounattend`, or `autoinstall`                                                                                                    |
-| `boot_method`               | No       | Override boot method (e.g., `wimboot` for Windows)                                                                                                                               |
-| `iso_initrd_name`           | No       | If set, chain-load the original uploaded ISO as an extra initrd module with this module name (for distros whose installer expects source media present at boot, e.g. Proxmox VE) |
+| Field                       | Required | Description                                                                                                                                   |
+| --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile_id`                | Yes      | Unique identifier (e.g., `ubuntu`, `my-distro`)                                                                                               |
+| `display_name`              | Yes      | Human-readable name shown in the UI                                                                                                           |
+| `family`                    | No       | Distro family (e.g., `debian`, `arch`, `redhat`) — for grouping                                                                               |
+| `filename_patterns`         | Yes      | Substrings to match in ISO filenames (case-insensitive)                                                                                       |
+| `kernel_paths`              | No       | Paths to try for the kernel inside the ISO (e.g., `/casper/vmlinuz`)                                                                          |
+| `initrd_paths`              | No       | Paths to try for the initrd inside the ISO                                                                                                    |
+| `squashfs_paths`            | No       | Paths to try for the squashfs root filesystem                                                                                                 |
+| `default_boot_params`       | No       | Default kernel boot parameters (with placeholder support)                                                                                     |
+| `boot_params_with_squashfs` | No       | Alternative boot params used when squashfs is detected                                                                                        |
+| `auto_install_type`         | No       | Auto-install format: `preseed`, `kickstart`, `autounattend`, or `autoinstall`                                                                 |
+| `boot_method`               | No       | Override boot method (e.g., `wimboot` for Windows)                                                                                            |
+| `iso_initrd_name`           | No       | If set, chain-load the original uploaded ISO as an extra initrd module with this module name for installers that require source media at boot |
 
 ### `iso_initrd_name` Notes
 
 - Use this only for installer workflows that require the source ISO to be present as a boot-time module.
-- **Name format**: Use ASCII letters and digits, optionally with `.`, `_`, or `-`. The name must contain at least one letter or digit. Spaces, control characters, path separators, and other characters are rejected, so the extra initrd line is omitted.
-- **Typical use**: Proxmox VE (`"iso_initrd_name": "proxmox.iso"`).
+- **Name format**: Use up to 128 ASCII letters and digits, optionally with `.`, `_`, or `-`. The name must contain at least one letter or digit. Spaces, control characters, path separators, and other characters are rejected, so the extra initrd line is omitted.
+- **Example**: `"installer.iso"` is a valid module name. The built-in Proxmox profile uses a dedicated prepared PXE bundle instead of this field.
 - **Effect**: Bootimus adds an extra `initrd` line for the original ISO in the generated iPXE stanza.
 - **Caveat**: This increases boot-time memory pressure because the ISO is loaded into RAM during boot.
 
 Leave this field empty for distros that do not require source-media chaining.
+
+### Proxmox VE PXE
+
+The built-in Proxmox profile uses `proxmox-auto-install-assistant prepare-iso --pxe --pxe-loader ipxe` to create the PXE kernel, gzip-compressed initrd, companion ISO, and iPXE script. The official Docker image includes this helper and `xorriso`; non-Docker installations need both available on `PATH`.
+
+The generated menu offers Automated, Graphical, and TUI installer modes. Automated mode retrieves its answer file over HTTP, using DHCP option 250 or the `proxmox-auto-installer.{search domain}` DNS TXT record to discover the URL. Configure one of these sources for unattended installs; choose Graphical or TUI for an interactive install.
 
 ### Windows Profiles
 

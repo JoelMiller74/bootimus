@@ -10,6 +10,9 @@ import (
 
 func detectDistroNameUnified(reader FileSystemReader, isoPath string) string {
 	filename := strings.ToLower(filepath.Base(isoPath))
+	if strings.Contains(filename, "proxmox") || strings.Contains(filename, "pve-") || strings.Contains(filename, "pbs-") || strings.Contains(filename, "pmg-") {
+		return "proxmox"
+	}
 
 	distroPatterns := map[string]string{
 		"windows":         "windows",
@@ -50,7 +53,10 @@ func detectDistroNameUnified(reader FileSystemReader, isoPath string) string {
 		"blackarch":       "arch",
 		"parabola":        "arch",
 		"truenas":         "debian",
-		"proxmox":         "debian",
+		"proxmox":         "proxmox",
+		"pve-":            "proxmox",
+		"pbs-":            "proxmox",
+		"pmg-":            "proxmox",
 		"devuan":          "debian",
 		"antix":           "debian",
 		"mx-":             "debian",
@@ -98,6 +104,9 @@ func detectDistroNameUnified(reader FileSystemReader, isoPath string) string {
 	if reader.FileExists("/.disk/info") {
 		if content := reader.ReadFileContent("/.disk/info"); content != "" {
 			contentLower := strings.ToLower(content)
+			if strings.Contains(contentLower, "proxmox") {
+				return "proxmox"
+			}
 			for pattern, distro := range distroPatterns {
 				if strings.Contains(contentLower, pattern) {
 					return distro
@@ -531,13 +540,25 @@ func (e *Extractor) cacheBootFilesUnified(files *BootFiles, reader FileSystemRea
 	isoBase := relativeISOBase(e.dataDir, isoPath)
 	bootFilesDir := filepath.Join(e.dataDir, isoBase)
 
-	if err := os.MkdirAll(bootFilesDir, 0755); err != nil {
+	if err := os.MkdirAll(bootFilesDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create boot files subdirectory: %w", err)
+	}
+
+	if files.Distro == "proxmox" {
+		prepared, err := prepareProxmoxPXEFiles(isoPath, filepath.Join(bootFilesDir, "proxmox-pxe"))
+		if err != nil {
+			return err
+		}
+		files.Kernel = prepared.Kernel
+		files.Initrd = prepared.Initrd
+		files.ExtractedDir = prepared.ExtractedDir
+		files.SquashfsPath = ""
+		return nil
 	}
 
 	if files.Distro == "windows" {
 		extractedDir := filepath.Join(bootFilesDir, "iso")
-		if err := os.MkdirAll(extractedDir, 0755); err != nil {
+		if err := os.MkdirAll(extractedDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create extracted ISO directory: %w", err)
 		}
 
@@ -579,7 +600,7 @@ func (e *Extractor) cacheBootFilesUnified(files *BootFiles, reader FileSystemRea
 	files.Initrd = initrdDest
 
 	extractedDir := filepath.Join(bootFilesDir, "iso")
-	if err := os.MkdirAll(extractedDir, 0755); err != nil {
+	if err := os.MkdirAll(extractedDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create extracted ISO directory: %w", err)
 	}
 

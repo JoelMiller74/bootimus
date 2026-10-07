@@ -192,37 +192,35 @@ func TestBuildWindowsBootSectionBareWimboot(t *testing.T) {
 
 func TestBuildKernelBootSectionChainsIsoInitrdForProxmox(t *testing.T) {
 	mb := testMenuBuilder(nil)
-	mb.isoInitrdNames = map[string]string{"proxmox": "proxmox.iso"}
 	baseURL := testBaseURL(mb)
 
 	img := &models.Image{ID: 7, Filename: "proxmox-ve_9.2-1.iso", Enabled: true, BootMethod: "kernel", Distro: "proxmox"}
 	out := mb.buildKernelBootSection(img, "proxmox-ve_9.2-1.iso", "proxmox-ve_9.2-1")
 
-	if !strings.Contains(out, fmt.Sprintf("initrd %s/isos/proxmox-ve_9.2-1.iso proxmox.iso\n", baseURL)) {
-		t.Errorf("expected the source ISO to be chain-loaded as an extra initrd module, got:\n%s", out)
+	if !strings.Contains(out, fmt.Sprintf("chain %s/boot/proxmox-ve_9.2-1/proxmox-pxe/boot.ipxe || goto failed\n", baseURL)) {
+		t.Errorf("expected the Proxmox PXE helper script to be chained, got:\n%s", out)
 	}
 }
 
 func TestBuildKernelBootSectionChainsIsoInitrdForNormalizedDistro(t *testing.T) {
 	mb := testMenuBuilder(nil)
-	mb.isoInitrdNames = map[string]string{"proxmox": "proxmox.iso"}
 	baseURL := testBaseURL(mb)
 
 	img := &models.Image{ID: 7, Filename: "proxmox-ve_9.2-1.iso", Enabled: true, BootMethod: "kernel", Distro: "  ProxMox  "}
 	out := mb.buildKernelBootSection(img, "proxmox-ve_9.2-1.iso", "proxmox-ve_9.2-1")
 
-	if !strings.Contains(out, fmt.Sprintf("initrd %s/isos/proxmox-ve_9.2-1.iso proxmox.iso\n", baseURL)) {
-		t.Errorf("expected the source ISO to be chain-loaded as an extra initrd module for normalized distro, got:\n%s", out)
+	if !strings.Contains(out, fmt.Sprintf("chain %s/boot/proxmox-ve_9.2-1/proxmox-pxe/boot.ipxe || goto failed\n", baseURL)) {
+		t.Errorf("expected normalized Proxmox distro to chain the prepared PXE script, got:\n%s", out)
 	}
 }
 
 func TestBuildKernelBootSectionRejectsUnsafeDirectIsoInitrdName(t *testing.T) {
 	mb := testMenuBuilder(nil)
-	mb.isoInitrdNames = map[string]string{"proxmox": "proxmox.iso\nreboot"}
-	img := &models.Image{ID: 7, Filename: "proxmox.iso", Enabled: true, BootMethod: "kernel", Distro: "proxmox"}
+	mb.isoInitrdNames = map[string]string{"other": "other.iso\nreboot"}
+	img := &models.Image{ID: 7, Filename: "other.iso", Enabled: true, BootMethod: "kernel", Distro: "other"}
 
-	out := mb.buildKernelBootSection(img, "proxmox.iso", "proxmox")
-	if strings.Contains(out, fmt.Sprintf("initrd %s/isos/proxmox.iso ", testBaseURL(mb))) {
+	out := mb.buildKernelBootSection(img, "other.iso", "other")
+	if strings.Contains(out, fmt.Sprintf("initrd %s/isos/other.iso ", testBaseURL(mb))) {
 		t.Fatalf("unsafe direct iso-initrd value was emitted in menu:\n%s", out)
 	}
 }

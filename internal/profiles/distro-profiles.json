@@ -291,10 +291,9 @@
         "/boot/initrd.img"
       ],
       "squashfs_paths": [],
-      "default_boot_params": "ramdisk_size=16777216 rw quiet splash=silent proxmox-start-auto-installer",
+      "default_boot_params": "",
       "auto_install_type": "",
       "boot_method": "kernel",
-      "iso_initrd_name": "proxmox.iso",
       "mirrors": [
         {
           "region": "Global (Official)",

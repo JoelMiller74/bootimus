@@ -108,7 +108,7 @@ func TestMatchProfile_FallsBackToFamily(t *testing.T) {
 	}
 }
 
-func TestProxmoxProfile_AutomatedInstallBootParams(t *testing.T) {
+func TestProxmoxProfileUsesPreparedPXEArtifacts(t *testing.T) {
 	profiles := loadEmbeddedForTest(t)
 
 	var proxmox *models.DistroProfile
@@ -122,11 +122,11 @@ func TestProxmoxProfile_AutomatedInstallBootParams(t *testing.T) {
 		t.Fatal("expected an embedded 'proxmox' distro profile")
 	}
 
-	if !strings.Contains(proxmox.DefaultBootParams, "proxmox-start-auto-installer") {
-		t.Errorf("expected default boot params to trigger the automated installer, got %q", proxmox.DefaultBootParams)
+	if proxmox.DefaultBootParams != "" {
+		t.Errorf("expected prepared PXE script to own Proxmox boot parameters, got %q", proxmox.DefaultBootParams)
 	}
-	if proxmox.IsoInitrdName == "" {
-		t.Error("expected the proxmox profile to chain-load the source ISO as an extra initrd module")
+	if proxmox.IsoInitrdName != "" {
+		t.Error("Proxmox PXE preparation supplies the companion ISO; the profile should not chain-load the raw source ISO")
 	}
 	for _, path := range []string{"/boot/linux26"} {
 		if !containsString(proxmox.KernelPaths, path) {

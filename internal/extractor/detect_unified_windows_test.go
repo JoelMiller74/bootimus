@@ -79,3 +79,16 @@ func TestDetectWindowsUnifiedRequiresBootWim(t *testing.T) {
 		t.Fatalf("expected error to identify missing boot.wim, got %v", err)
 	}
 }
+
+func TestDetectDistroNameUnifiedProxmoxProfile(t *testing.T) {
+	for _, filename := range []string{
+		"proxmox-ve_9.2-1.iso",
+		"pve-9.2.iso",
+		"pbs-4.2.iso",
+		"pmg-9.2.iso",
+	} {
+		if got := detectDistroNameUnified(fakeFSReader{}, filename); got != "proxmox" {
+			t.Errorf("detectDistroNameUnified(%q) = %q, want proxmox", filename, got)
+		}
+	}
+}

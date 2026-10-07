@@ -169,7 +169,7 @@ The built-in set is always available as a fallback. Files not present in the act
 - Ubuntu (all flavours), Debian, Linux Mint, Pop!_OS, Kali, Parrot, Zorin, elementary OS, MX Linux, antiX, Devuan, PureOS, Deepin, LMDE, TrueNAS SCALE
 
 ### Debian-family (dedicated profiles)
-- **Proxmox VE/Backup Server/Mail Gateway** — recognised via a dedicated profile (not just the generic Debian pattern) so the automated-install kernel parameters (`proxmox-start-auto-installer`) and the required ISO chain-load are applied automatically. See [Proxmox's prepare-iso/answer.toml docs](https://pve.proxmox.com/pve-docs/chapter-pve-installation.html) to bake an answer file into the ISO before uploading it to Bootimus.
+- **Proxmox VE/Backup Server/Mail Gateway** — recognised via a dedicated profile and prepared for PXE with Proxmox's `proxmox-auto-install-assistant`. The generated iPXE menu offers Automated, Graphical, and TUI installer modes. Automated installation requires an answer-file URL discoverable through DHCP option 250 or the documented DNS TXT record; select Graphical or TUI for interactive installation. See [Proxmox's automated installation guide](https://pve.proxmox.com/wiki/Automated_Installation#Network_Booting_via_PXE).
 
 ### Red Hat-based
 - Fedora, CentOS, Rocky Linux, AlmaLinux, Oracle Linux, Nobara, Mageia
